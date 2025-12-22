@@ -12,7 +12,8 @@ import {
   User, 
   HelpCircle,
   Filter,
-  MousePointerClick
+  MousePointerClick,
+  Check
 } from 'lucide-react';
 
 // --- Types ---
@@ -85,8 +86,16 @@ const KnowledgeGraph = () => {
   });
   const [searchTerm, setSearchTerm] = useState('');
 
-  // Form State
+  // Form State (Add)
   const [formData, setFormData] = useState({
+    label: '',
+    description: '',
+    quadrant: 'q1' as QuadrantType,
+    tags: ''
+  });
+
+  // Form State (Edit)
+  const [editFormData, setEditFormData] = useState({
     label: '',
     description: '',
     quadrant: 'q1' as QuadrantType,
@@ -100,6 +109,18 @@ const KnowledgeGraph = () => {
   useEffect(() => {
     localStorage.setItem('knowledge-graph-data', JSON.stringify(data));
   }, [data]);
+
+  // Sync selected node to edit form
+  useEffect(() => {
+    if (selectedNode) {
+      setEditFormData({
+        label: selectedNode.label,
+        description: selectedNode.description,
+        quadrant: selectedNode.quadrant,
+        tags: selectedNode.tags.join(', ')
+      });
+    }
+  }, [selectedNode]);
 
   // --- D3 Logic ---
 
@@ -352,6 +373,37 @@ const KnowledgeGraph = () => {
     simulationRef.current?.alpha(1).restart();
   };
 
+  const handleUpdateNode = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedNode) return;
+
+    const newTags = editFormData.tags.split(',').map(t => t.trim()).filter(t => t);
+    const updatedTags = Array.from(new Set([...data.tags, ...newTags]));
+
+    setData(prev => ({
+      ...prev,
+      tags: updatedTags,
+      nodes: prev.nodes.map(n => n.id === selectedNode.id ? {
+        ...n,
+        label: editFormData.label,
+        description: editFormData.description,
+        quadrant: editFormData.quadrant,
+        tags: newTags,
+      } : n)
+    }));
+    
+    setSelectedNode(prev => prev ? {
+        ...prev,
+        label: editFormData.label,
+        description: editFormData.description,
+        quadrant: editFormData.quadrant,
+        tags: newTags
+    } : null);
+
+    // Restart simulation to handle potential quadrant changes
+    simulationRef.current?.alpha(1).restart();
+  };
+
   const handleDeleteNode = (id: string) => {
     setData(prev => ({
       ...prev,
@@ -564,42 +616,87 @@ const KnowledgeGraph = () => {
             </div>
           )}
 
-          {/* DETAILS TAB */}
+          {/* DETAILS/EDIT TAB */}
           {activeTab === 'details' && selectedNode && (
-            <div className="space-y-6">
-               <div className="border-b border-slate-100 pb-6">
-                  <div className="flex items-center gap-2 mb-3">
-                    <span 
-                      className="w-2 h-2 rounded-full" 
-                      style={{ backgroundColor: QUADRANTS[selectedNode.quadrant].color }}
-                    ></span>
-                    <span className="text-xs font-bold uppercase tracking-wide text-slate-500">
-                      {QUADRANTS[selectedNode.quadrant].label}
-                    </span>
-                  </div>
-                  <h2 className="text-2xl font-bold text-slate-800 leading-tight">{selectedNode.label}</h2>
-                  <div className="flex flex-wrap gap-2 mt-4">
-                    {selectedNode.tags.map(t => (
-                      <span key={t} className="px-2.5 py-1 rounded-md text-xs font-medium bg-slate-100 text-slate-600">#{t}</span>
-                    ))}
+            <form onSubmit={handleUpdateNode} className="space-y-6">
+               <div className="border-b border-slate-100 pb-2 mb-4">
+                  <div className="flex items-center justify-between mb-4">
+                     <span className="text-xs font-bold uppercase tracking-wide text-slate-400">Edit Node</span>
+                     <span className="text-xs text-slate-400">ID: {selectedNode.id}</span>
                   </div>
                </div>
 
-               <div className="prose prose-sm prose-slate">
-                 <p className="text-slate-600 leading-relaxed whitespace-pre-wrap">
-                   {selectedNode.description || "No description provided."}
-                 </p>
-               </div>
+               <div>
+                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Title</label>
+                <input 
+                  type="text" 
+                  required
+                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:bg-white outline-none transition-all"
+                  value={editFormData.label}
+                  onChange={e => setEditFormData({...editFormData, label: e.target.value})}
+                />
+              </div>
 
-               <div className="pt-8">
+              <div>
+                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Quadrant</label>
+                <div className="grid grid-cols-2 gap-3">
+                  {Object.values(QUADRANTS).map(q => (
+                    <button
+                      type="button"
+                      key={q.id}
+                      onClick={() => setEditFormData({...editFormData, quadrant: q.id as QuadrantType})}
+                      className={`p-3 rounded-lg border text-left transition-all relative overflow-hidden group ${editFormData.quadrant === q.id 
+                        ? 'border-transparent ring-2 ring-offset-2' 
+                        : 'border-slate-200 hover:border-slate-300'}`}
+                      style={{ 
+                        '--tw-ring-color': q.color,
+                        backgroundColor: editFormData.quadrant === q.id ? q.bg : 'white'
+                      } as any}
+                    >
+                      <div className="absolute top-0 right-0 w-1 h-full" style={{background: q.color}}></div>
+                      <div className="font-semibold text-sm text-slate-800">{q.label}</div>
+                      <div className="text-[10px] text-slate-500 mt-0.5 font-medium">{q.sub}</div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+               <div>
+                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Description</label>
+                <textarea 
+                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:bg-white outline-none transition-all h-32 resize-none text-sm"
+                  value={editFormData.description}
+                  onChange={e => setEditFormData({...editFormData, description: e.target.value})}
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Tags</label>
+                <input 
+                  type="text" 
+                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:bg-white outline-none transition-all text-sm"
+                  value={editFormData.tags}
+                  onChange={e => setEditFormData({...editFormData, tags: e.target.value})}
+                />
+              </div>
+
+               <div className="pt-4 flex flex-col gap-3">
                  <button 
+                   type="submit"
+                   className="w-full bg-emerald-500 hover:bg-emerald-600 text-white font-semibold py-3 px-4 rounded-lg shadow-lg shadow-emerald-200 transition-all active:scale-95 flex items-center justify-center gap-2"
+                 >
+                   <Check size={20} /> Save Changes
+                 </button>
+                 
+                 <button 
+                   type="button"
                    onClick={() => handleDeleteNode(selectedNode.id)}
                    className="w-full border border-red-200 text-red-600 hover:bg-red-50 hover:border-red-300 font-semibold py-3 px-4 rounded-lg transition-colors flex items-center justify-center gap-2"
                  >
                    <Trash2 size={18} /> Delete Node
                  </button>
                </div>
-            </div>
+            </form>
           )}
 
           {activeTab === 'details' && !selectedNode && (
