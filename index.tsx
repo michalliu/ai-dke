@@ -260,6 +260,27 @@ const KnowledgeGraph = () => {
           if (!event.active) simulation.alphaTarget(0);
           d.fx = null;
           d.fy = null;
+
+          // Determine new quadrant based on position
+          const x = d.x || 0;
+          const y = d.y || 0;
+          
+          let newQuad: QuadrantType = 'q1';
+          if (x >= 0 && y < 0) newQuad = 'q1';      // Top Right
+          else if (x < 0 && y < 0) newQuad = 'q2';  // Top Left
+          else if (x < 0 && y >= 0) newQuad = 'q4'; // Bottom Left
+          else newQuad = 'q3';                      // Bottom Right (x >= 0 && y >= 0)
+
+          if (newQuad !== d.quadrant) {
+            // Update Data in React State
+            setData(prev => ({
+              ...prev,
+              nodes: prev.nodes.map(n => n.id === d.id ? { ...n, quadrant: newQuad } : n)
+            }));
+            
+            // If the dragged node is currently selected, update its local state too so the UI reflects it immediately
+            setSelectedNode(prev => prev && prev.id === d.id ? { ...prev, quadrant: newQuad } : prev);
+          }
         })
       )
       .on("click", (event, d) => {
